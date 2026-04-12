@@ -36,7 +36,6 @@ The agent figures out which AWS API calls to make, executes them in real time, a
 
 ```bash
 pip3 install aws-iam-agent
-url: https://pypi.org/project/aws-iam-agent/#files
 ```
 
 ### Via Homebrew (some issues, in progress)
