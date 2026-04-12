@@ -31,11 +31,12 @@ The agent figures out which AWS API calls to make, executes them in real time, a
 pip3 install aws-iam-agent
 ```
 
+
 ### Via Homebrew (some issues, in progress)
 
 ```bash
 brew tap sujay2306/aws-iam-agent
-brew install iamscout
+brew install aws-iam-agent
 ```
 
 
@@ -55,7 +56,7 @@ AWS_REGION=us-east-1
 ## Usage
 
 ```bash
-iamscout
+aws-iam-agent
 ```
 
 ```
