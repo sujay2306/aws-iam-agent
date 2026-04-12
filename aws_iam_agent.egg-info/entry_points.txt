@@ -1,0 +1,2 @@
+[console_scripts]
+aws-iam-agent = main:main

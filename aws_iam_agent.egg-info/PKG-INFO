@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: aws-iam-agent
+Version: 1.0.0
+Requires-Dist: langchain
+Requires-Dist: langchain-openai
+Requires-Dist: boto3
+Requires-Dist: python-dotenv
+Dynamic: requires-dist
