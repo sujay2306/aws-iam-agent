@@ -6,13 +6,7 @@ An AI-powered AWS IAM agent built with LangChain and GPT-4. Ask questions about 
 
 Instead of writing one-off CLI scripts or digging through the AWS console, just ask:
 
-```
-You: list all IAM users
-You: what policies does terraform-admin have?
-You: show me what TerraformStateAccess allows
-You: list access keys for deploy-bot
-You: which roles have AdministratorAccess?
-```
+![Demo](demo.png)
 
 The agent figures out which AWS API calls to make, executes them in real time, and returns a plain English answer.
 
