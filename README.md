@@ -93,8 +93,6 @@ Then run:
 
 ```bash
 aws-iam-security-agent
-# or
-aws-iam-agent
 ```
 
 ## Setup
