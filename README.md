@@ -1,10 +1,14 @@
 # aws-iam-security-agent
 
-An AI-powered AWS IAM security agent built with LangChain and GPT-4. Query IAM state, audit security posture, simulate permissions, analyze least privilege, rotate access keys, and manage secrets — all from your terminal
+An AI-powered AWS IAM security agent built with LangChain and GPT-4. Query IAM state, audit security posture, simulate permissions, analyze least privilege, rotate access keys, and manage secrets — all from your terminal in plain English.
 
 ## What it does
 
-Instead of writing one-off CLI scripts or digging through the AWS console, just ask the agent
+Instead of writing one-off CLI scripts or digging through the AWS console, just ask:
+
+![Demo](demo.png)
+
+The agent figures out which AWS API calls to make, executes them in real time, and returns a plain English answer.
 
 ## Capabilities
 
@@ -82,14 +86,15 @@ Instead of writing one-off CLI scripts or digging through the AWS console, just 
 ### Via pip
 
 ```bash
-pip3 install aws-iam-agent
+pip install aws_iam_security_agent
 ```
 
-### Via Homebrew
+Then run:
 
 ```bash
-brew tap sujay2306/aws-iam-agent
-brew install sujay2306/aws-iam-agent/aws-iam-agent
+aws-iam-security-agent
+# or
+aws-iam-agent
 ```
 
 ## Setup
