@@ -4,9 +4,7 @@ An AI-powered AWS IAM security agent built with LangChain and GPT-4. Query IAM s
 
 ## What it does
 
-Instead of writing one-off CLI scripts or digging through the AWS console, just ask
-
-The agent figures out which AWS API calls to make, executes them in real time, and returns a plain English answer.
+Instead of writing one-off CLI scripts or digging through the AWS console, just ask the agent
 
 ## Capabilities
 
