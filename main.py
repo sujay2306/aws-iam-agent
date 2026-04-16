@@ -31,6 +31,25 @@ def _safe_tool(func):
 
 def main():
     load_dotenv()
+    if not os.getenv("AWS_ACCESS_KEY_ID"):
+        for fallback in [
+            os.path.join(os.path.expanduser("~"), ".env"),
+            os.path.join(os.path.expanduser("~"), ".aws-iam-agent.env"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
+        ]:
+            if os.path.exists(fallback):
+                load_dotenv(fallback, override=True)
+                break
+
+    if not os.getenv("AWS_ACCESS_KEY_ID") or not os.getenv("OPENAI_API_KEY"):
+        print("ERROR: Missing credentials. Create a .env file in the current directory with:")
+        print("  OPENAI_API_KEY=sk-proj-...")
+        print("  AWS_ACCESS_KEY_ID=AKIA...")
+        print("  AWS_SECRET_ACCESS_KEY=...")
+        print("  AWS_REGION=us-east-1")
+        print()
+        print("Or place it at ~/.env or ~/.aws-iam-agent.env")
+        return
 
     aws_kwargs = dict(
         aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
