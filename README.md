@@ -1,4 +1,4 @@
-# aws-iam-agent
+# aws-iam-security-agent
 
 An AI-powered AWS IAM security agent built with LangChain and GPT-4. Query IAM state, audit security posture, simulate permissions, analyze least privilege, rotate access keys, and manage secrets — all from your terminal in plain English.
 
