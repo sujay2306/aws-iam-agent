@@ -59,6 +59,7 @@ def main():
 
     iam = boto3.client("iam", **aws_kwargs)
     secrets = boto3.client("secretsmanager", **aws_kwargs)
+    cloudtrail = boto3.client("cloudtrail", **aws_kwargs)
 
     # ── IAM read tools ───────────────────────────────────────────────
 
@@ -567,6 +568,159 @@ def main():
 
         return json.dumps({"principal": principal_arn, "services": results}, indent=2)
 
+    # ── Least privilege policy generation (CloudTrail-based) ────────
+
+    @tool
+    @_safe_tool
+    def least_privilege_advisor(identity_name: str, identity_type: str = "user", lookback_days: int = 90) -> str:
+        """Generates a least-privilege IAM policy based on ACTUAL API usage from CloudTrail event history.
+        Looks back through CloudTrail events for the given user or role, collects every unique
+        action and resource ARN that was actually used, and builds a minimal IAM policy document
+        that grants only those permissions.
+
+        Args:
+            identity_name: The IAM user name or role name to analyze
+            identity_type: "user" or "role" (default "user")
+            lookback_days: How many days of CloudTrail history to scan (default 90, max 90 for free-tier event history)
+
+        Returns: A ready-to-use IAM policy JSON, plus a summary of actions discovered."""
+        from datetime import timedelta
+        from collections import defaultdict
+
+        lookback_days = min(lookback_days, 90)
+        now = datetime.now(timezone.utc)
+        start_time = now - timedelta(days=lookback_days)
+
+        if identity_type == "role":
+            username_filter = f"arn:aws:sts::{_get_account_id(iam)}:assumed-role/{identity_name}"
+        else:
+            username_filter = identity_name
+
+        service_action_map = defaultdict(set)
+        resource_arns = defaultdict(set)
+        event_count = 0
+        next_token = None
+
+        while True:
+            lookup_kwargs = {
+                "LookupAttributes": [
+                    {"AttributeKey": "Username", "AttributeValue": username_filter}
+                ],
+                "StartTime": start_time,
+                "EndTime": now,
+                "MaxResults": 50,
+            }
+            if next_token:
+                lookup_kwargs["NextToken"] = next_token
+
+            response = cloudtrail.lookup_events(**lookup_kwargs)
+            events = response.get("Events", [])
+
+            for event in events:
+                event_count += 1
+                source = event.get("EventSource", "")
+                event_name = event.get("EventName", "")
+                service_prefix = source.replace(".amazonaws.com", "")
+                action = f"{service_prefix}:{event_name}"
+                service_action_map[service_prefix].add(action)
+
+                detail = event.get("CloudTrailEvent")
+                if detail:
+                    try:
+                        detail_json = json.loads(detail)
+                        for resource in detail_json.get("resources", []):
+                            arn = resource.get("ARN")
+                            if arn:
+                                resource_arns[action].add(arn)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+            next_token = response.get("NextToken")
+            if not next_token:
+                break
+
+        if event_count == 0:
+            return json.dumps({
+                "identity": identity_name,
+                "identity_type": identity_type,
+                "lookback_days": lookback_days,
+                "event_count": 0,
+                "policy": None,
+                "message": f"No CloudTrail events found for '{identity_name}' in the last {lookback_days} days. "
+                           "The identity may be inactive, or events may have aged out of free-tier event history.",
+            }, indent=2)
+
+        all_actions = sorted({a for actions in service_action_map.values() for a in actions})
+
+        statements = []
+        actions_with_specific_resources = {}
+        actions_with_wildcard = []
+
+        for action in all_actions:
+            arns = resource_arns.get(action, set())
+            if arns:
+                actions_with_specific_resources[action] = sorted(arns)
+            else:
+                actions_with_wildcard.append(action)
+
+        resource_groups = defaultdict(list)
+        for action, arns in actions_with_specific_resources.items():
+            key = tuple(sorted(arns))
+            resource_groups[key].append(action)
+
+        for arns_tuple, actions in sorted(resource_groups.items(), key=lambda x: x[1][0]):
+            statements.append({
+                "Effect": "Allow",
+                "Action": sorted(actions),
+                "Resource": list(arns_tuple),
+            })
+
+        if actions_with_wildcard:
+            statements.append({
+                "Effect": "Allow",
+                "Action": sorted(actions_with_wildcard),
+                "Resource": "*",
+            })
+
+        policy_document = {
+            "Version": "2012-10-17",
+            "Statement": statements,
+        }
+
+        service_summary = {
+            svc: sorted(actions) for svc, actions in sorted(service_action_map.items())
+        }
+
+        return json.dumps({
+            "identity": identity_name,
+            "identity_type": identity_type,
+            "lookback_days": lookback_days,
+            "event_count": event_count,
+            "unique_actions": len(all_actions),
+            "unique_services": len(service_action_map),
+            "services_used": service_summary,
+            "generated_policy": policy_document,
+            "notes": [
+                "This policy is based on observed CloudTrail events and covers actions actually performed.",
+                "CloudTrail free-tier event history retains management events for 90 days.",
+                "Data events (S3 object-level, Lambda invoke) require a trail and may not appear here.",
+                "Review the policy before attaching — some actions may have been one-time setup tasks.",
+            ],
+        }, indent=2)
+
+    def _get_account_id(iam_client):
+        """Extract the AWS account ID from any IAM ARN in the account."""
+        try:
+            return iam_client.get_user()["User"]["Arn"].split(":")[4]
+        except Exception:
+            try:
+                users = iam_client.list_users(MaxItems=1)["Users"]
+                if users:
+                    return users[0]["Arn"].split(":")[4]
+            except Exception:
+                pass
+        return "UNKNOWN"
+
     # ── Agent setup ──────────────────────────────────────────────────
 
     tools = [
@@ -579,6 +733,7 @@ def main():
         security_audit, generate_credential_report,
         simulate_policy, simulate_custom_policy,
         get_unused_permissions, get_last_accessed_details,
+        least_privilege_advisor,
     ]
 
     llm = ChatOpenAI(model="gpt-4", temperature=0, openai_api_key=os.getenv("OPENAI_API_KEY"))
@@ -598,6 +753,7 @@ CAPABILITIES:
 - Generate and parse the AWS credential report for account-wide health snapshots
 - Simulate permissions: test "can user X do action Y on resource Z?" without trying it
 - Analyze least privilege: find unused permissions via Access Advisor
+- Generate least-privilege policies from CloudTrail event history for any user or role
 
 AUDIT RULES:
 - When asked to audit, run `security_audit` for a quick scan with risk scoring.
@@ -616,6 +772,16 @@ LEAST PRIVILEGE RULES:
   Recommend removing those permissions.
 - Use `get_last_accessed_details` for a quick view of when each service was last accessed.
 - These tools call Access Advisor which takes ~10-30s to generate results.
+- When asked "what should the least privilege policy look like for <user/role>?", use
+  `least_privilege_advisor` to query CloudTrail event history and generate a policy based on
+  actual API usage. This builds a ready-to-use IAM policy JSON from real events.
+- `least_privilege_advisor` scans up to 90 days of CloudTrail management events. Pass
+  identity_type="role" for roles and identity_type="user" for users.
+- Always present the generated policy as formatted JSON and remind the user to review it
+  before attaching — some actions may have been one-time setup tasks that shouldn't be in
+  the long-term policy.
+- If no events are found, suggest the identity may be inactive or that data events (S3
+  object-level, Lambda invocations) require a CloudTrail trail to be recorded.
 
 KEY ROTATION RULES:
 - AWS allows a maximum of 2 access keys per IAM user.
